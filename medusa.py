@@ -143,13 +143,22 @@ def runGame():
             for wormBody in wormCoords[w][1:]:
                 if wormBody['x'] == wormCoords[w][HEAD]['x'] and wormBody['y'] == wormCoords[w][HEAD]['y']:
                     hit_gameover = w # game over
-            # or another worm
+            # or another worm, Longer worm dies
             for wother in range(NUM_WORMS):
                 if wother == w:
                     continue
                 for indivWormCoords in wormCoords[wother]:
                     if wormCoords[w][HEAD]['x'] == indivWormCoords['x'] and wormCoords[w][HEAD]['y'] == indivWormCoords['y']:
-                        hit_gameover = w
+                        if len(wormCoords[w]) < len(wormCoords[wother]):
+                            del wormCoords[wother]
+                        elif len(wormCoords[w]) > len(wormCoords[wother]):
+                            del wormCoords[w]
+                        else:
+                            #due to shifting, delete the later worm first.
+                            gr = max(w, wother)
+                            lr = min(w, wother)
+                            del wormCoords[gr]
+                            del wormCoords[lr]
             # handle laser collisions
             caught = False
             for c in range(len(wormCoords[w])):
