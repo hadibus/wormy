@@ -36,13 +36,22 @@ RIGHT = 'right'
 
 HEAD = 0 # syntactic sugar: index of the worm's head
 
-NUM_WORMS = 2 # number of worms
-NUM_APPLES = 2
+CENTRALIZED = False
+NUM_WORMS_INIT = 2 # number of initial worms
+LEN_LIMIT = 8
+APPLE_LIFETIME = (80, 100)
+APPLE_SPAWN_FREQ = 15
+NEIGHBORHOOD = 5 # Odd is symmetrical
+
 LASER_FREQ = 0.07
 LASER_FULL_CHARGE = 30
 
+
+
 def main():
     global FPSCLOCK, DISPLAYSURF, BASICFONT
+
+    #random.seed(0)
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -64,7 +73,7 @@ def runGame():
     laserBeam = []
     stones = []
     gotApples = []
-    for _ in range(NUM_WORMS):
+    for _ in range(NUM_WORMS_INIT):
         haveLaser.append(0)
         fireLaser.append(False)
         gotApples.append(False)
@@ -80,48 +89,21 @@ def runGame():
 
     # Start the apples in random places.
     apples = []
-    for a in range(NUM_APPLES):
-        apples.append(getRandomLocation())
-
+    appleSpawnCount = 0
     laserPickup = False
+    score = 0
 
     while True: # main game loop
+        direction = getActions(wormCoords, direction, apples)
         for event in pygame.event.get(): # event handling loop
             if event.type == QUIT:
                 terminate()
+
+
+
             elif event.type == KEYDOWN:
-                # Controls worm 1
-                if (event.key == K_LEFT) and direction[0] != RIGHT:
-                    direction[0] = LEFT
-                elif (event.key == K_RIGHT) and direction[0] != LEFT:
-                    direction[0] = RIGHT
-                elif (event.key == K_UP) and direction[0] != DOWN:
-                    direction[0] = UP
-                elif (event.key == K_DOWN) and direction[0] != UP:
-                    direction[0] = DOWN
-                elif event.key == K_ESCAPE:
-                    terminate()
-                elif (event.key == K_KP1):
-                    fireLaser[0] = True
-                else:
-                    fireLaser[0] = False
-
-                # Controls worm 2
-                if (event.key == K_a) and direction[1] != RIGHT:
-                    direction[1] = LEFT
-                elif (event.key == K_d) and direction[1] != LEFT:
-                    direction[1] = RIGHT
-                elif (event.key == K_w) and direction[1] != DOWN:
-                    direction[1] = UP
-                elif (event.key == K_s) and direction[1] != UP:
-                    direction[1] = DOWN
-                elif (event.key == K_e):
-                    fireLaser[1] = True
-                else:
-                    fireLaser[1] = False
-
                 # Controls all worms
-                for d in range(NUM_WORMS):
+                for d in range(len(wormCoords)):
                     if (event.key == K_KP4) and direction[d] != RIGHT:
                         direction[d] = LEFT
                     elif (event.key == K_KP6) and direction[d] != LEFT:
@@ -132,11 +114,25 @@ def runGame():
                         direction[d] = DOWN
                     elif (event.key == K_KP5):
                         fireLaser[d] = True
-                    #else:
-                    #    fireLaser[d] = False
+
+        # Split worms if too long
+        for w in range(len(wormCoords)):
+            if len(wormCoords[w]) == LEN_LIMIT:
+                coords = []
+                halfLen = LEN_LIMIT // 2
+                while len(wormCoords[w]) > LEN_LIMIT / 2:
+                    coords.append(wormCoords[w][halfLen])
+                    del wormCoords[w][halfLen]
+                wormCoords.append(coords)
+                direction.append(direction[w])
+                gotApples.append(False)
+                fireLaser.append(False)
+                haveLaser.append(False)
+
 
         hit_gameover = -1
-        for w in range(NUM_WORMS):
+        wormToKill = []
+        for w in range(len(wormCoords)):
             # check if the worm has hit itself, the edge, or a stone
             if not isWithinGrid(wormCoords[w][HEAD]) or wormCoords[w][HEAD] in stones:
                 hit_gameover = w # game over
@@ -144,21 +140,30 @@ def runGame():
                 if wormBody['x'] == wormCoords[w][HEAD]['x'] and wormBody['y'] == wormCoords[w][HEAD]['y']:
                     hit_gameover = w # game over
             # or another worm, Longer worm dies
-            for wother in range(NUM_WORMS):
+            for wother in range(len(wormCoords)):
                 if wother == w:
                     continue
                 for indivWormCoords in wormCoords[wother]:
                     if wormCoords[w][HEAD]['x'] == indivWormCoords['x'] and wormCoords[w][HEAD]['y'] == indivWormCoords['y']:
                         if len(wormCoords[w]) < len(wormCoords[wother]):
-                            del wormCoords[wother]
+                            wormToKill.append(wother)
                         elif len(wormCoords[w]) > len(wormCoords[wother]):
-                            del wormCoords[w]
+                            wormToKill.append(w)
                         else:
-                            #due to shifting, delete the later worm first.
-                            gr = max(w, wother)
+                            #Delete older worm
                             lr = min(w, wother)
-                            del wormCoords[gr]
-                            del wormCoords[lr]
+                            wormToKill.append(lr)
+
+        wormToKill = list(set(wormToKill)) #only unique worms
+        wormToKill.sort(reverse=True)
+        for val in wormToKill:
+            del wormCoords[val]
+            del gotApples[val]
+            del direction[val]
+            del fireLaser[val]
+            del haveLaser[val]
+
+        for w in range(len(wormCoords)):
             # handle laser collisions
             caught = False
             for c in range(len(wormCoords[w])):
@@ -184,23 +189,42 @@ def runGame():
                 laserPickup = False
                 haveLaser[w] = LASER_FULL_CHARGE
 
+            eat = [apple for apple in apples if wormCoords[w][HEAD]['x'] == apple['x'] and wormCoords[w][HEAD]['y'] == apple['y']]
             # check if worm has eaten an apple
-            if wormCoords[w][HEAD] in apples:
-                apples.remove(wormCoords[w][HEAD])
-                loc = getRandomLocation()
-                while loc in stones:
-                    loc = getRandomLocation()
-                apples.append(loc) # set a new apple somewhere
+            if len(eat) > 0:
                 gotApples[w] = True
             else:
                 gotApples[w] = False
-                # don't remove worm's tail segment
+
+            for e in eat:
+                score += 1
+                apples.remove(e)
             
-        
+            # add new apples
+            appleSpawnCount += 1
+            if appleSpawnCount == APPLE_SPAWN_FREQ:
+                appleSpawnCount = 0
+                loc = getRandomLocation()
+                while loc in stones:
+                    loc = getRandomLocation()
+                loc["time"] = getAppleLifetime()
+                apples.append(loc) # set a new apple somewhere
+
+            for a in range(len(apples)):
+                if apples[a]['time'] > 0:
+                    apples[a]['time'] -= 1
+
+            newApples = []
+            for apple in apples:
+                if apple['time'] != 0:
+                    newApples.append(apple)
+                else:
+                    score -= 1
+            apples = [apple for apple in apples if apple['time'] != 0]
 
         # discard old laser beam coordinates
         laserBeam = []
-        for w in range(NUM_WORMS):
+        for w in range(len(wormCoords)):
             if hit_gameover != -1:
                 break
             # move the worm by adding a segment in the direction it is moving
@@ -237,7 +261,7 @@ def runGame():
 
         DISPLAYSURF.fill(BGCOLOR)
         drawGrid()
-        for w in range(NUM_WORMS):
+        for w in range(len(wormCoords)):
             drawWorm(wormCoords[w], haveLaser[w])
         
         for l in range(len(haveLaser)):
@@ -259,13 +283,9 @@ def runGame():
 
         drawLaserBeam(laserBeam)
 
-        scores = []
-        for w in range(NUM_WORMS):
-            if w == hit_gameover:
-                scores.append(len(wormCoords[w]) - 5)
-            else:
-                scores.append(len(wormCoords[w]) - 3)
-        drawScores(scores)
+        drawScore(score)
+
+        #TODO stuffs
         pygame.display.update()
         FPSCLOCK.tick(FPS)
         # End game if a worm hit something
@@ -352,10 +372,8 @@ def showGameOverScreen():
             pygame.event.get() # clear event queue
             return
 
-def drawScores(scores):
-    scoreStr = ''
-    for i in range(len(scores)):
-        scoreStr += 'W' + str(i) + ' score: ' + str(scores[i]) + ' '
+def drawScore(score):
+    scoreStr = 'Score: ' + str(score)
     scoreSurf = BASICFONT.render(scoreStr, True, WHITE)
     scoreRect = scoreSurf.get_rect()
     scoreRect.topleft = (10, 10)
@@ -414,6 +432,38 @@ def drawStones(coords):
         pygame.draw.rect(DISPLAYSURF, DARKGRAY, stoneSegmentRect)
         stoneSegmentRect = pygame.Rect(x + 4, y + 4, CELLSIZE - 8, CELLSIZE - 8)
         pygame.draw.rect(DISPLAYSURF, GRAY, stoneSegmentRect)
+
+def getActions(wormCoords, direction, apples):
+    if not CENTRALIZED:
+        # Move with some randomness
+        # Go toward apples if within sensing radius
+        # Don't hit walls
+        prob_dirchange = 0.5
+        newDir = direction
+        # Randomness
+        for d in range(len(newDIr)):
+            if random.uniform(0,1) < prob_dirchange:
+                change = random.randint(0,1)
+                if direction[d] == UP or direction[d] == DOWN:
+                    if change == 0:
+                        newDir[d] = LEFT
+                    elif change == 1:
+                        newDir[d] = RIGHT
+                elif direction[d] == LEFT or direction[d] == RIGHT:
+                    if change == 0:
+                        newDir[d] = UP
+                    elif change == 1:
+                        newDir[d] = DOWN
+
+        #TODO make not hit walls
+        return newDir
+        
+
+def getAppleLifetime():
+    if type(APPLE_LIFETIME) is int:
+        return APPLE_LIFETIME
+    elif type(APPLE_LIFETIME) is tuple:
+        return random.randint(APPLE_LIFETIME[0], APPLE_LIFETIME[1])
 
 def isWithinGrid(coord):
     return coord['x'] > -1 and coord['x'] < CELLWIDTH and coord['y'] > -1 and coord['y'] < CELLHEIGHT
