@@ -36,11 +36,12 @@ RIGHT = 'right'
 
 HEAD = 0 # syntactic sugar: index of the worm's head
 
-CENTRALIZED = True
+CENTRALIZED = False
 NUM_WORMS_INIT = 2 # number of initial worms
 LEN_LIMIT = 4
-APPLE_LIFETIME = (80, 100)
-APPLE_SPAWN_FREQ = 15
+SECTOR_LIMIT = 4
+APPLE_LIFETIME = 200
+APPLE_SPAWN_FREQ = 50
 NEIGHBORHOOD = 5
 
 LASER_FREQ = 0.07
@@ -55,6 +56,7 @@ def main():
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
+    pygame.time.set_timer(12, 30000)
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
     BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
     pygame.display.set_caption('Medusa')
@@ -125,15 +127,15 @@ def runGame():
 
                 newWormy = {
                     'coords': coords, 
-                    'dir': worms[w]['dir'],
+                    'dir': str(worms[w]['dir']),
                     'haveLaser': 0,
                     'fireLaser': False,
                     'gotApple': False,
-                    'sector': worms[w]['sector']
+                    'sector': list(worms[w]['sector'])
                     }
-
-                worms[w]['sector'].append(True)
-                newWormy['sector'].append(False)
+                if len(worms[w]['sector']) < SECTOR_LIMIT:
+                    worms[w]['sector'].append(True)
+                    newWormy['sector'].append(False)
                 worms.append(newWormy)
 
 
@@ -439,7 +441,7 @@ def getActions(worms, apples):
     # Move with some randomness
     # Go toward apples if within sensing radius
     # Don't hit walls
-    prob_dirchange = 0.1
+    prob_dirchange = 0.4
     # Randomness
     for worm in worms:
         change = random.randint(0,1)
@@ -447,8 +449,6 @@ def getActions(worms, apples):
         sa = senseApple(worm['coords'][HEAD], apples)
         # beyond corners
         bounds = getBoundaries(worm)
-
-        print(worm['sector'])
 
         if worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
             if worm['dir'] == UP:
@@ -551,7 +551,7 @@ def getActions(worms, apples):
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 0:
                     worm['dir'] = UP
-'''
+
         elif sa != {}:
             if sa['x'] < 0 and sa['y'] <= 0 and worm['dir'] != RIGHT:
                 worm['dir'] = LEFT
@@ -573,7 +573,7 @@ def getActions(worms, apples):
                     worm['dir'] = UP
                 elif change == 1:
                     worm['dir'] = DOWN
-'''
+
 def senseApple(wormHead, apples):
     dist = {}
     for apple in apples:
@@ -598,7 +598,7 @@ def getBoundaries(worm):
     bounds['ymin'] = 0
     bounds['ymax'] = CELLHEIGHT - 1
     if CENTRALIZED:
-        maxIters = 3
+        maxIters = SECTOR_LIMIT
         even = False
         for s in worm['sector']:
             if maxIters == 0:
@@ -613,7 +613,7 @@ def getBoundaries(worm):
                     bounds['xmin'] = (bounds['xmin'] + bounds['xmax']) // 2 + 1
             else:
                 if s: 
-                    bounds['ymax'] = (bounds['xmin'] + bounds['xmax']) // 2
+                    bounds['ymax'] = (bounds['ymin'] + bounds['ymax']) // 2
                 else:
                     bounds['ymin'] = (bounds['ymin'] + bounds['ymax']) // 2 + 1
 
