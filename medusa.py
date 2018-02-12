@@ -6,7 +6,7 @@
 import random, pygame, sys
 from pygame.locals import *
 
-FPS = 10
+FPS = 50
 WINDOWWIDTH = 1280
 WINDOWHEIGHT = 960
 CELLSIZE = 20
@@ -38,10 +38,10 @@ HEAD = 0 # syntactic sugar: index of the worm's head
 
 CENTRALIZED = False
 NUM_WORMS_INIT = 2 # number of initial worms
-LEN_LIMIT = 8
+LEN_LIMIT = 4
 APPLE_LIFETIME = (80, 100)
 APPLE_SPAWN_FREQ = 15
-NEIGHBORHOOD = 5 # Odd is symmetrical
+NEIGHBORHOOD = 5
 
 LASER_FREQ = 0.07
 LASER_FULL_CHARGE = 30
@@ -73,6 +73,7 @@ def runGame():
     laserBeam = []
     stones = []
     gotApples = []
+    wormSectors = [[True],[False]]
     for _ in range(NUM_WORMS_INIT):
         haveLaser.append(0)
         fireLaser.append(False)
@@ -434,36 +435,181 @@ def drawStones(coords):
         pygame.draw.rect(DISPLAYSURF, GRAY, stoneSegmentRect)
 
 def getActions(wormCoords, direction, apples):
-    if not CENTRALIZED:
-        # Move with some randomness
-        # Go toward apples if within sensing radius
-        # Don't hit walls
-        prob_dirchange = 0.5
-        newDir = direction
-        # Randomness
-        for d in range(len(newDIr)):
-            if random.uniform(0,1) < prob_dirchange:
-                change = random.randint(0,1)
-                if direction[d] == UP or direction[d] == DOWN:
-                    if change == 0:
-                        newDir[d] = LEFT
-                    elif change == 1:
-                        newDir[d] = RIGHT
-                elif direction[d] == LEFT or direction[d] == RIGHT:
-                    if change == 0:
-                        newDir[d] = UP
-                    elif change == 1:
-                        newDir[d] = DOWN
+    # Move with some randomness
+    # Go toward apples if within sensing radius
+    # Don't hit walls
+    prob_dirchange = 0.5
+    newDir = direction
+    # Randomness
+    for d in range(len(newDir)):
+        change = random.randint(0,1)
+        bounds = getBoundaries(d, len(newDir))
+        changeDir = random.uniform(0,1) < prob_dirchange
+        sa = senseApple(wormCoords[d][HEAD], apples)
+        # beyond corners
+        if wormCoords[d][HEAD]['x'] <= bounds['xmin'] and wormCoords[d][HEAD]['y'] <= bounds['ymin']:
+            if direction[d] == UP:
+                newDir[d] = RIGHT
+            elif direction[d] == LEFT:
+                newDir[d] = DOWN
 
-        #TODO make not hit walls
-        return newDir
-        
+        elif wormCoords[d][HEAD]['x'] <= bounds['xmin'] and wormCoords[d][HEAD]['y'] >= bounds['ymax']:
+            if direction[d] == DOWN:
+                newDir[d] = RIGHT
+            elif direction[d] == LEFT:
+                newDir[d] = UP
+
+        elif wormCoords[d][HEAD]['x'] >= bounds['xmax'] and wormCoords[d][HEAD]['y'] <= bounds['ymin']:
+            if direction[d] == UP:
+                newDir[d] = LEFT
+            elif direction[d] == RIGHT:
+                newDir[d] = DOWN
+
+        elif wormCoords[d][HEAD]['x'] >= bounds['xmax'] and wormCoords[d][HEAD]['y'] >= bounds['ymax']:
+            if direction[d] == DOWN:
+                newDir[d] = LEFT
+            elif direction[d] == RIGHT:
+                newDir[d] = UP
+
+        # out of bounds
+        elif wormCoords[d][HEAD]['x'] < bounds['xmin']:
+            if direction[d] == LEFT:
+                if change == 0:
+                    newDir[d] = UP
+                elif change == 1:
+                    newDir[d] = DOWN
+            elif direction[d] == UP or direction[d] == DOWN:
+                newDir[d] = RIGHT
+
+        elif wormCoords[d][HEAD]['x'] > bounds['xmax']:
+            if direction[d] == RIGHT:
+                if change == 0:
+                    newDir[d] = UP
+                elif change == 1:
+                    newDir[d] = DOWN
+            elif direction[d] == UP or direction[d] == DOWN:
+                newDir[d] = LEFT
+
+        elif wormCoords[d][HEAD]['y'] < bounds['ymin']:
+            if direction[d] == UP:
+                if change == 0:
+                    newDir[d] = LEFT
+                elif change == 1:
+                    newDir[d] = RIGHT
+            elif direction[d] == LEFT or direction[d] == RIGHT:
+                newDir[d] = DOWN
+
+        elif wormCoords[d][HEAD]['y'] > bounds['ymax']:
+            if direction[d] == DOWN:
+                if change == 0:
+                    newDir[d] = LEFT
+                elif change == 1:
+                    newDir[d] = RIGHT
+            elif direction[d] == LEFT or direction[d] == RIGHT:
+                newDir[d] = UP
+
+        # on bounds
+        elif wormCoords[d][HEAD]['x'] == bounds['xmin']:
+            if direction[d] == LEFT:
+                if change == 0:
+                    newDir[d] = UP
+                elif change == 1:
+                    newDir[d] = DOWN
+            elif direction[d] == UP or direction[d] == DOWN:
+                if changeDir and change == 1:
+                    newDir[d] = RIGHT
+
+        elif wormCoords[d][HEAD]['x'] == bounds['xmax']:
+            if direction[d] == RIGHT:
+                if change == 0:
+                    newDir[d] = UP
+                elif change == 1:
+                    newDir[d] = DOWN
+            elif direction[d] == UP or direction[d] == DOWN:
+                if changeDir and change == 0:
+                    newDir[d] = LEFT
+
+        elif wormCoords[d][HEAD]['y'] == bounds['ymin']:
+            if direction[d] == UP:
+                if change == 0:
+                    newDir[d] = LEFT
+                elif change == 1:
+                    newDir[d] = RIGHT
+            elif direction[d] == LEFT or direction[d] == RIGHT:
+                if changeDir and change == 1:
+                    newDir[d] = DOWN
+
+        elif wormCoords[d][HEAD]['y'] == bounds['ymax']:
+            if direction[d] == DOWN:
+                if change == 0:
+                    newDir[d] = LEFT
+                elif change == 1:
+                    newDir[d] = RIGHT
+            elif direction[d] == LEFT or direction[d] == RIGHT:
+                if changeDir and change == 0:
+                    newDir[d] = UP
+
+        elif sa != {}:
+            if sa['x'] < 0 and sa['y'] <= 0 and direction[d] != RIGHT:
+                newDir[d] = LEFT
+            elif sa['x'] >= 0 and sa['y'] < 0 and direction[d] != DOWN:
+                newDir[d] = UP
+            elif sa['x'] > 0 and sa['y'] >= 0 and direction[d] != LEFT:
+                newDir[d] = RIGHT
+            elif sa['x'] <= 0 and sa['y'] > 0 and direction[d] != UP:
+                newDir[d] = DOWN
+
+        elif changeDir:
+            if direction[d] == UP or direction[d] == DOWN:
+                if change == 0:
+                    newDir[d] = LEFT
+                elif change == 1:
+                    newDir[d] = RIGHT
+            elif direction[d] == LEFT or direction[d] == RIGHT:
+                if change == 0:
+                    newDir[d] = UP
+                elif change == 1:
+                    newDir[d] = DOWN
+
+    return newDir
+
+def senseApple(wormHead, apples):
+    dist = {}
+    for apple in apples:
+        xDiff = apple['x'] - wormHead['x']
+        yDiff = apple['y'] - wormHead['y']
+        if abs(xDiff) <= NEIGHBORHOOD and abs(yDiff) <= NEIGHBORHOOD:
+            dist['x'] = xDiff
+            dist['y'] = yDiff
+            break # just first apple seen
+    return dist
 
 def getAppleLifetime():
     if type(APPLE_LIFETIME) is int:
         return APPLE_LIFETIME
     elif type(APPLE_LIFETIME) is tuple:
         return random.randint(APPLE_LIFETIME[0], APPLE_LIFETIME[1])
+
+def getBoundaries(num, count):
+    bounds = {}
+    if not CENTRALIZED:
+        bounds['xmin'] = 0
+        bounds['xmax'] = CELLWIDTH - 1
+        bounds['ymin'] = 0
+        bounds['ymax'] = CELLHEIGHT - 1
+    elif CENTRALIZED:
+        a = 0
+        b = 0
+        for n in range(30):
+            a = n ** 2
+            if a > count:
+                break
+            else:
+                b = a
+
+        
+    return bounds
+
 
 def isWithinGrid(coord):
     return coord['x'] > -1 and coord['x'] < CELLWIDTH and coord['y'] > -1 and coord['y'] < CELLHEIGHT
