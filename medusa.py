@@ -83,6 +83,8 @@ def runGame():
             'fireLaser': False,
             'gotApple': False,
             'sector': []})
+    worms[0]['sector'] = [True]
+    worms[1]['sector'] = [False]
 
     # Start the apples in random places.
     apples = []
@@ -91,7 +93,7 @@ def runGame():
     score = 0
 
     while True: # main game loop
-        worms = getActions(worms, apples)
+        getActions(worms, apples)
         for event in pygame.event.get(): # event handling loop
             if event.type == QUIT:
                 terminate()
@@ -437,15 +439,16 @@ def getActions(worms, apples):
     # Move with some randomness
     # Go toward apples if within sensing radius
     # Don't hit walls
-    prob_dirchange = 0.5
-    newWorms = worms
+    prob_dirchange = 0.1
     # Randomness
-    for worm in newWorms:
+    for worm in worms:
         change = random.randint(0,1)
         changeDir = random.uniform(0,1) < prob_dirchange
         sa = senseApple(worm['coords'][HEAD], apples)
         # beyond corners
         bounds = getBoundaries(worm)
+
+        print(worm['sector'])
 
         if worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
             if worm['dir'] == UP:
@@ -548,7 +551,7 @@ def getActions(worms, apples):
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 0:
                     worm['dir'] = UP
-
+'''
         elif sa != {}:
             if sa['x'] < 0 and sa['y'] <= 0 and worm['dir'] != RIGHT:
                 worm['dir'] = LEFT
@@ -570,9 +573,7 @@ def getActions(worms, apples):
                     worm['dir'] = UP
                 elif change == 1:
                     worm['dir'] = DOWN
-
-    return newWorms
-
+'''
 def senseApple(wormHead, apples):
     dist = {}
     for apple in apples:
@@ -607,14 +608,14 @@ def getBoundaries(worm):
 
             if even:
                 if s:
-                    bounds['xmax'] //= 2
+                    bounds['xmax'] = (bounds['xmin'] + bounds['xmax']) // 2
                 else:
-                    bounds['xmin'] = bounds['xmax'] // 2 + 1
+                    bounds['xmin'] = (bounds['xmin'] + bounds['xmax']) // 2 + 1
             else:
                 if s: 
-                    bounds['ymax'] //= 2
+                    bounds['ymax'] = (bounds['xmin'] + bounds['xmax']) // 2
                 else:
-                    bounds['ymin'] = bounds['ymax'] // 2 + 1
+                    bounds['ymin'] = (bounds['ymin'] + bounds['ymax']) // 2 + 1
 
         
     return bounds
