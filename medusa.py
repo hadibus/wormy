@@ -6,7 +6,7 @@
 import random, pygame, sys
 from pygame.locals import *
 
-FPS = 50
+FPS = 20
 WINDOWWIDTH = 1280
 WINDOWHEIGHT = 960
 CELLSIZE = 20
@@ -36,7 +36,7 @@ RIGHT = 'right'
 
 HEAD = 0 # syntactic sugar: index of the worm's head
 
-CENTRALIZED = False
+CENTRALIZED = True
 NUM_WORMS_INIT = 2 # number of initial worms
 LEN_LIMIT = 4
 SECTOR_LIMIT = 4
@@ -56,7 +56,7 @@ def main():
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
-    pygame.time.set_timer(12, 30000)
+    #pygame.time.set_timer(12, 30000)
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
     BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
     pygame.display.set_caption('Medusa')
@@ -477,37 +477,25 @@ def getActions(worms, apples):
         # out of bounds
         elif worm['coords'][HEAD]['x'] < bounds['xmin']:
             if worm['dir'] == LEFT:
-                if change == 0:
-                    worm['dir'] = UP
-                elif change == 1:
-                    worm['dir'] = DOWN
+                worm['dir'] = UP
             elif worm['dir'] == UP or worm['dir'] == DOWN:
                 worm['dir'] = RIGHT
 
         elif worm['coords'][HEAD]['x'] > bounds['xmax']:
             if worm['dir'] == RIGHT:
-                if change == 0:
-                    worm['dir'] = UP
-                elif change == 1:
-                    worm['dir'] = DOWN
+                worm['dir'] = DOWN
             elif worm['dir'] == UP or worm['dir'] == DOWN:
                 worm['dir'] = LEFT
 
         elif worm['coords'][HEAD]['y'] < bounds['ymin']:
             if worm['dir'] == UP:
-                if change == 0:
-                    worm['dir'] = LEFT
-                elif change == 1:
-                    worm['dir'] = RIGHT
+                worm['dir'] = RIGHT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 worm['dir'] = DOWN
 
         elif worm['coords'][HEAD]['y'] > bounds['ymax']:
             if worm['dir'] == DOWN:
-                if change == 0:
-                    worm['dir'] = LEFT
-                elif change == 1:
-                    worm['dir'] = RIGHT
+                worm['dir'] = LEFT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 worm['dir'] = UP
 
