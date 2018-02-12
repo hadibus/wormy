@@ -36,7 +36,7 @@ RIGHT = 'right'
 
 HEAD = 0 # syntactic sugar: index of the worm's head
 
-CENTRALIZED = False
+CENTRALIZED = True
 NUM_WORMS_INIT = 2 # number of initial worms
 LEN_LIMIT = 4
 APPLE_LIFETIME = (80, 100)
@@ -66,27 +66,23 @@ def main():
 
 
 def runGame():
-    wormCoords = []
-    direction = []
-    haveLaser = []
-    fireLaser = []
+    worms = []
     laserBeam = []
     stones = []
-    gotApples = []
-    wormSectors = [[True],[False]]
     for _ in range(NUM_WORMS_INIT):
-        haveLaser.append(0)
-        fireLaser.append(False)
-        gotApples.append(False)
         # Set a random start point.
         startx = random.randint(5, CELLWIDTH - 6)
         starty = random.randint(5, CELLHEIGHT - 6)
-        wormCoords.append([
+        worms.append({'coords': [
             {'x': startx,     'y': starty},
             {'x': startx - 1, 'y': starty},
             {'x': startx - 2, 'y': starty}
-            ])
-        direction.append(RIGHT)
+            ],
+            'dir': RIGHT,
+            'haveLaser': 0,
+            'fireLaser': False,
+            'gotApple': False,
+            'sector': []})
 
     # Start the apples in random places.
     apples = []
@@ -95,7 +91,7 @@ def runGame():
     score = 0
 
     while True: # main game loop
-        direction = getActions(wormCoords, direction, apples)
+        worms = getActions(worms, apples)
         for event in pygame.event.get(): # event handling loop
             if event.type == QUIT:
                 terminate()
@@ -104,79 +100,84 @@ def runGame():
 
             elif event.type == KEYDOWN:
                 # Controls all worms
-                for d in range(len(wormCoords)):
-                    if (event.key == K_KP4) and direction[d] != RIGHT:
-                        direction[d] = LEFT
-                    elif (event.key == K_KP6) and direction[d] != LEFT:
-                        direction[d] = RIGHT
-                    elif (event.key == K_KP8) and direction[d] != DOWN:
-                        direction[d] = UP
-                    elif (event.key == K_KP2) and direction[d] != UP:
-                        direction[d] = DOWN
+                for worm in worms:
+                    if (event.key == K_KP4) and worm['dir'] != RIGHT:
+                        worm['dir'] = LEFT
+                    elif (event.key == K_KP6) and worm['dir'] != LEFT:
+                        worm['dir'] = RIGHT
+                    elif (event.key == K_KP8) and worm['dir'] != DOWN:
+                        worm['dir'] = UP
+                    elif (event.key == K_KP2) and worm['dir'] != UP:
+                        worm['dir'] = DOWN
                     elif (event.key == K_KP5):
-                        fireLaser[d] = True
+                        worm['fireLaser'] = True
 
         # Split worms if too long
-        for w in range(len(wormCoords)):
-            if len(wormCoords[w]) == LEN_LIMIT:
+        for w in range(len(worms)):
+            if len(worms[w]['coords']) == LEN_LIMIT:
                 coords = []
                 halfLen = LEN_LIMIT // 2
-                while len(wormCoords[w]) > LEN_LIMIT / 2:
-                    coords.append(wormCoords[w][halfLen])
-                    del wormCoords[w][halfLen]
-                wormCoords.append(coords)
-                direction.append(direction[w])
-                gotApples.append(False)
-                fireLaser.append(False)
-                haveLaser.append(False)
+                while len(worms[w]['coords']) > halfLen:
+                    coords.append(worms[w]['coords'][halfLen])
+                    del worms[w]['coords'][halfLen]
+
+                newWormy = {
+                    'coords': coords, 
+                    'dir': worms[w]['dir'],
+                    'haveLaser': 0,
+                    'fireLaser': False,
+                    'gotApple': False,
+                    'sector': worms[w]['sector']
+                    }
+
+                worms[w]['sector'].append(True)
+                newWormy['sector'].append(False)
+                worms.append(newWormy)
+
 
 
         hit_gameover = -1
         wormToKill = []
-        for w in range(len(wormCoords)):
+        for w in range(len(worms)):
             # check if the worm has hit itself, the edge, or a stone
-            if not isWithinGrid(wormCoords[w][HEAD]) or wormCoords[w][HEAD] in stones:
+            if not isWithinGrid(worms[w]['coords'][HEAD]) or worms[w]['coords'][HEAD] in stones:
                 hit_gameover = w # game over
-            for wormBody in wormCoords[w][1:]:
-                if wormBody['x'] == wormCoords[w][HEAD]['x'] and wormBody['y'] == wormCoords[w][HEAD]['y']:
+            for wormBody in worms[w]['coords'][1:]:
+                if wormBody['x'] == worms[w]['coords'][HEAD]['x'] and wormBody['y'] == worms[w]['coords'][HEAD]['y']:
                     hit_gameover = w # game over
             # or another worm, Longer worm dies
-            for wother in range(len(wormCoords)):
+            for wother in range(len(worms)):
                 if wother == w:
                     continue
-                for indivWormCoords in wormCoords[wother]:
-                    if wormCoords[w][HEAD]['x'] == indivWormCoords['x'] and wormCoords[w][HEAD]['y'] == indivWormCoords['y']:
-                        if len(wormCoords[w]) < len(wormCoords[wother]):
+                for indivWormCoords in worms[wother]['coords']:
+                    if worms[w]['coords'][HEAD]['x'] == indivWormCoords['x'] and worms[w]['coords'][HEAD]['y'] == indivWormCoords['y']:
+                        if len(worms[w]['coords']) < len(worms[wother]['coords']):
                             wormToKill.append(wother)
-                        elif len(wormCoords[w]) > len(wormCoords[wother]):
+                        elif len(worms[w]['coords']) > len(worms[wother]['coords']):
                             wormToKill.append(w)
                         else:
-                            #Delete older worm
+                            #Delete newer worm
                             lr = min(w, wother)
                             wormToKill.append(lr)
 
         wormToKill = list(set(wormToKill)) #only unique worms
         wormToKill.sort(reverse=True)
-        for val in wormToKill:
-            del wormCoords[val]
-            del gotApples[val]
-            del direction[val]
-            del fireLaser[val]
-            del haveLaser[val]
+        for w in wormToKill:
+            del worms[w]
 
-        for w in range(len(wormCoords)):
+        for w in range(len(worms)):
             # handle laser collisions
             caught = False
-            for c in range(len(wormCoords[w])):
-                if wormCoords[w][c] in laserBeam:
+            for c in range(len(worms[w]['coords'])):
+                if worms[w]['coords'][c] in laserBeam:
                     caught = True
                 if caught:
-                    while c < len(wormCoords[w]):
-                        if wormCoords[w][c] not in laserBeam:
-                            stones.append(dict(wormCoords[w][c]))
-                        del wormCoords[w][c]
+                    while c < len(worms[w]['coords']):
+                        if worms[w]['coords'][c] not in laserBeam:
+                            stones.append(dict(worms[w]['coords'][c]))
+                        del worms[w]['coords'][c]
                     break
-            if len(wormCoords[w]) < 1:
+            if len(worms[w]['coords']) < 1:
                 hit_gameover = w
                 
 
@@ -185,17 +186,17 @@ def runGame():
 
 
             # check if worm has picked up laser
-            if laserPickup != False and wormCoords[w][HEAD]['x'] == laserPickup['x'] and wormCoords[w][HEAD]['y'] == laserPickup['y']:
+            if laserPickup != False and worms[w]['coords'][HEAD]['x'] == laserPickup['x'] and worms[w]['coords'][HEAD]['y'] == laserPickup['y']:
                 del laserPickup
                 laserPickup = False
-                haveLaser[w] = LASER_FULL_CHARGE
+                worms[w]['haveLaser'] = LASER_FULL_CHARGE
 
-            eat = [apple for apple in apples if wormCoords[w][HEAD]['x'] == apple['x'] and wormCoords[w][HEAD]['y'] == apple['y']]
+            eat = [apple for apple in apples if worms[w]['coords'][HEAD]['x'] == apple['x'] and worms[w]['coords'][HEAD]['y'] == apple['y']]
             # check if worm has eaten an apple
             if len(eat) > 0:
-                gotApples[w] = True
+                worms[w]['gotApple'] = True
             else:
-                gotApples[w] = False
+                worms[w]['gotApple'] = False
 
             for e in eat:
                 score += 1
@@ -225,36 +226,36 @@ def runGame():
 
         # discard old laser beam coordinates
         laserBeam = []
-        for w in range(len(wormCoords)):
+        for w in range(len(worms)):
             if hit_gameover != -1:
                 break
             # move the worm by adding a segment in the direction it is moving
-            if direction[w] == UP:
-                newHead = {'x': wormCoords[w][HEAD]['x'], 'y': wormCoords[w][HEAD]['y'] - 1}
-            elif direction[w] == DOWN:
-                newHead = {'x': wormCoords[w][HEAD]['x'], 'y': wormCoords[w][HEAD]['y'] + 1}
-            elif direction[w] == LEFT:
-                newHead = {'x': wormCoords[w][HEAD]['x'] - 1, 'y': wormCoords[w][HEAD]['y']}
-            elif direction[w] == RIGHT:
-                newHead = {'x': wormCoords[w][HEAD]['x'] + 1, 'y': wormCoords[w][HEAD]['y']}
-            wormCoords[w].insert(HEAD, newHead)
+            if worms[w]['dir'] == UP:
+                newHead = {'x': worms[w]['coords'][HEAD]['x'], 'y': worms[w]['coords'][HEAD]['y'] - 1}
+            elif worms[w]['dir'] == DOWN:
+                newHead = {'x': worms[w]['coords'][HEAD]['x'], 'y': worms[w]['coords'][HEAD]['y'] + 1}
+            elif worms[w]['dir'] == LEFT:
+                newHead = {'x': worms[w]['coords'][HEAD]['x'] - 1, 'y': worms[w]['coords'][HEAD]['y']}
+            elif worms[w]['dir'] == RIGHT:
+                newHead = {'x': worms[w]['coords'][HEAD]['x'] + 1, 'y': worms[w]['coords'][HEAD]['y']}
+            worms[w]['coords'].insert(HEAD, newHead)
 
-            if gotApples[w] == False:
-                del wormCoords[w][-1] # remove worm's tail segment
+            if worms[w]['gotApple'] == False:
+                del worms[w]['coords'][-1] # remove worm's tail segment
 
             # make laser beam
-            if fireLaser[w] and haveLaser[w] > 0:
-                fireLaser[w] = False
-                haveLaser[w] = 0
-                laserCoord = dict(wormCoords[w][HEAD])
+            if worms[w]['fireLaser'] and worms[w]['haveLaser'] > 0:
+                worms[w]['fireLaser'] = False
+                worms[w]['haveLaser'] = 0
+                laserCoord = dict(worms[w]['coords'][HEAD])
                 while isWithinGrid(laserCoord):
-                    if direction[w] == UP:
+                    if worms[w]['dir'] == UP:
                         laserCoord['y'] -= 1
-                    elif direction[w] == DOWN:
+                    elif worms[w]['dir'] == DOWN:
                         laserCoord['y'] += 1
-                    elif direction[w] == LEFT:
+                    elif worms[w]['dir'] == LEFT:
                         laserCoord['x'] -= 1
-                    elif direction[w] == RIGHT:
+                    elif worms[w]['dir'] == RIGHT:
                         laserCoord['x'] += 1
                     
                     laserBeam.append(dict(laserCoord))
@@ -262,12 +263,10 @@ def runGame():
 
         DISPLAYSURF.fill(BGCOLOR)
         drawGrid()
-        for w in range(len(wormCoords)):
-            drawWorm(wormCoords[w], haveLaser[w])
-        
-        for l in range(len(haveLaser)):
-            if haveLaser[l] > 0:
-                haveLaser[l] -= 1
+        for worm in worms:
+            drawWorm(worm['coords'], worm['haveLaser'])
+            if worm['haveLaser'] > 0:
+                worm['haveLaser'] -= 1
 
         drawApples(apples)
 
@@ -434,144 +433,145 @@ def drawStones(coords):
         stoneSegmentRect = pygame.Rect(x + 4, y + 4, CELLSIZE - 8, CELLSIZE - 8)
         pygame.draw.rect(DISPLAYSURF, GRAY, stoneSegmentRect)
 
-def getActions(wormCoords, direction, apples):
+def getActions(worms, apples):
     # Move with some randomness
     # Go toward apples if within sensing radius
     # Don't hit walls
     prob_dirchange = 0.5
-    newDir = direction
+    newWorms = worms
     # Randomness
-    for d in range(len(newDir)):
+    for worm in newWorms:
         change = random.randint(0,1)
-        bounds = getBoundaries(d, len(newDir))
         changeDir = random.uniform(0,1) < prob_dirchange
-        sa = senseApple(wormCoords[d][HEAD], apples)
+        sa = senseApple(worm['coords'][HEAD], apples)
         # beyond corners
-        if wormCoords[d][HEAD]['x'] <= bounds['xmin'] and wormCoords[d][HEAD]['y'] <= bounds['ymin']:
-            if direction[d] == UP:
-                newDir[d] = RIGHT
-            elif direction[d] == LEFT:
-                newDir[d] = DOWN
+        bounds = getBoundaries(worm)
 
-        elif wormCoords[d][HEAD]['x'] <= bounds['xmin'] and wormCoords[d][HEAD]['y'] >= bounds['ymax']:
-            if direction[d] == DOWN:
-                newDir[d] = RIGHT
-            elif direction[d] == LEFT:
-                newDir[d] = UP
+        if worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
+            if worm['dir'] == UP:
+                worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT:
+                worm['dir'] = DOWN
 
-        elif wormCoords[d][HEAD]['x'] >= bounds['xmax'] and wormCoords[d][HEAD]['y'] <= bounds['ymin']:
-            if direction[d] == UP:
-                newDir[d] = LEFT
-            elif direction[d] == RIGHT:
-                newDir[d] = DOWN
+        elif worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] >= bounds['ymax']:
+            if worm['dir'] == DOWN:
+                worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT:
+                worm['dir'] = UP
 
-        elif wormCoords[d][HEAD]['x'] >= bounds['xmax'] and wormCoords[d][HEAD]['y'] >= bounds['ymax']:
-            if direction[d] == DOWN:
-                newDir[d] = LEFT
-            elif direction[d] == RIGHT:
-                newDir[d] = UP
+        elif worm['coords'][HEAD]['x'] >= bounds['xmax'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
+            if worm['dir'] == UP:
+                worm['dir'] = LEFT
+            elif worm['dir'] == RIGHT:
+                worm['dir'] = DOWN
+
+        elif worm['coords'][HEAD]['x'] >= bounds['xmax'] and worm['coords'][HEAD]['y'] >= bounds['ymax']:
+            if worm['dir'] == DOWN:
+                worm['dir'] = LEFT
+            elif worm['dir'] == RIGHT:
+                worm['dir'] = UP
 
         # out of bounds
-        elif wormCoords[d][HEAD]['x'] < bounds['xmin']:
-            if direction[d] == LEFT:
+        elif worm['coords'][HEAD]['x'] < bounds['xmin']:
+            if worm['dir'] == LEFT:
                 if change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
                 elif change == 1:
-                    newDir[d] = DOWN
-            elif direction[d] == UP or direction[d] == DOWN:
-                newDir[d] = RIGHT
+                    worm['dir'] = DOWN
+            elif worm['dir'] == UP or worm['dir'] == DOWN:
+                worm['dir'] = RIGHT
 
-        elif wormCoords[d][HEAD]['x'] > bounds['xmax']:
-            if direction[d] == RIGHT:
+        elif worm['coords'][HEAD]['x'] > bounds['xmax']:
+            if worm['dir'] == RIGHT:
                 if change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
                 elif change == 1:
-                    newDir[d] = DOWN
-            elif direction[d] == UP or direction[d] == DOWN:
-                newDir[d] = LEFT
+                    worm['dir'] = DOWN
+            elif worm['dir'] == UP or worm['dir'] == DOWN:
+                worm['dir'] = LEFT
 
-        elif wormCoords[d][HEAD]['y'] < bounds['ymin']:
-            if direction[d] == UP:
+        elif worm['coords'][HEAD]['y'] < bounds['ymin']:
+            if worm['dir'] == UP:
                 if change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
                 elif change == 1:
-                    newDir[d] = RIGHT
-            elif direction[d] == LEFT or direction[d] == RIGHT:
-                newDir[d] = DOWN
+                    worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
+                worm['dir'] = DOWN
 
-        elif wormCoords[d][HEAD]['y'] > bounds['ymax']:
-            if direction[d] == DOWN:
+        elif worm['coords'][HEAD]['y'] > bounds['ymax']:
+            if worm['dir'] == DOWN:
                 if change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
                 elif change == 1:
-                    newDir[d] = RIGHT
-            elif direction[d] == LEFT or direction[d] == RIGHT:
-                newDir[d] = UP
+                    worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
+                worm['dir'] = UP
 
         # on bounds
-        elif wormCoords[d][HEAD]['x'] == bounds['xmin']:
-            if direction[d] == LEFT:
+        elif worm['coords'][HEAD]['x'] == bounds['xmin']:
+            if worm['dir'] == LEFT:
                 if change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
                 elif change == 1:
-                    newDir[d] = DOWN
-            elif direction[d] == UP or direction[d] == DOWN:
+                    worm['dir'] = DOWN
+            elif worm['dir'] == UP or worm['dir'] == DOWN:
                 if changeDir and change == 1:
-                    newDir[d] = RIGHT
+                    worm['dir'] = RIGHT
 
-        elif wormCoords[d][HEAD]['x'] == bounds['xmax']:
-            if direction[d] == RIGHT:
+        elif worm['coords'][HEAD]['x'] == bounds['xmax']:
+            if worm['dir'] == RIGHT:
                 if change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
                 elif change == 1:
-                    newDir[d] = DOWN
-            elif direction[d] == UP or direction[d] == DOWN:
+                    worm['dir'] = DOWN
+            elif worm['dir'] == UP or worm['dir'] == DOWN:
                 if changeDir and change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
 
-        elif wormCoords[d][HEAD]['y'] == bounds['ymin']:
-            if direction[d] == UP:
+        elif worm['coords'][HEAD]['y'] == bounds['ymin']:
+            if worm['dir'] == UP:
                 if change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
                 elif change == 1:
-                    newDir[d] = RIGHT
-            elif direction[d] == LEFT or direction[d] == RIGHT:
+                    worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 1:
-                    newDir[d] = DOWN
+                    worm['dir'] = DOWN
 
-        elif wormCoords[d][HEAD]['y'] == bounds['ymax']:
-            if direction[d] == DOWN:
+        elif worm['coords'][HEAD]['y'] == bounds['ymax']:
+            if worm['dir'] == DOWN:
                 if change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
                 elif change == 1:
-                    newDir[d] = RIGHT
-            elif direction[d] == LEFT or direction[d] == RIGHT:
+                    worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
 
         elif sa != {}:
-            if sa['x'] < 0 and sa['y'] <= 0 and direction[d] != RIGHT:
-                newDir[d] = LEFT
-            elif sa['x'] >= 0 and sa['y'] < 0 and direction[d] != DOWN:
-                newDir[d] = UP
-            elif sa['x'] > 0 and sa['y'] >= 0 and direction[d] != LEFT:
-                newDir[d] = RIGHT
-            elif sa['x'] <= 0 and sa['y'] > 0 and direction[d] != UP:
-                newDir[d] = DOWN
+            if sa['x'] < 0 and sa['y'] <= 0 and worm['dir'] != RIGHT:
+                worm['dir'] = LEFT
+            elif sa['x'] >= 0 and sa['y'] < 0 and worm['dir'] != DOWN:
+                worm['dir'] = UP
+            elif sa['x'] > 0 and sa['y'] >= 0 and worm['dir'] != LEFT:
+                worm['dir'] = RIGHT
+            elif sa['x'] <= 0 and sa['y'] > 0 and worm['dir'] != UP:
+                worm['dir'] = DOWN
 
         elif changeDir:
-            if direction[d] == UP or direction[d] == DOWN:
+            if worm['dir'] == UP or worm['dir'] == DOWN:
                 if change == 0:
-                    newDir[d] = LEFT
+                    worm['dir'] = LEFT
                 elif change == 1:
-                    newDir[d] = RIGHT
-            elif direction[d] == LEFT or direction[d] == RIGHT:
+                    worm['dir'] = RIGHT
+            elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if change == 0:
-                    newDir[d] = UP
+                    worm['dir'] = UP
                 elif change == 1:
-                    newDir[d] = DOWN
+                    worm['dir'] = DOWN
 
-    return newDir
+    return newWorms
 
 def senseApple(wormHead, apples):
     dist = {}
@@ -590,22 +590,31 @@ def getAppleLifetime():
     elif type(APPLE_LIFETIME) is tuple:
         return random.randint(APPLE_LIFETIME[0], APPLE_LIFETIME[1])
 
-def getBoundaries(num, count):
+def getBoundaries(worm):
     bounds = {}
-    if not CENTRALIZED:
-        bounds['xmin'] = 0
-        bounds['xmax'] = CELLWIDTH - 1
-        bounds['ymin'] = 0
-        bounds['ymax'] = CELLHEIGHT - 1
-    elif CENTRALIZED:
-        a = 0
-        b = 0
-        for n in range(30):
-            a = n ** 2
-            if a > count:
+    bounds['xmin'] = 0
+    bounds['xmax'] = CELLWIDTH - 1
+    bounds['ymin'] = 0
+    bounds['ymax'] = CELLHEIGHT - 1
+    if CENTRALIZED:
+        maxIters = 3
+        even = False
+        for s in worm['sector']:
+            if maxIters == 0:
                 break
+            maxIters -= 1
+            even = not even
+
+            if even:
+                if s:
+                    bounds['xmax'] //= 2
+                else:
+                    bounds['xmin'] = bounds['xmax'] // 2 + 1
             else:
-                b = a
+                if s: 
+                    bounds['ymax'] //= 2
+                else:
+                    bounds['ymin'] = bounds['ymax'] // 2 + 1
 
         
     return bounds
