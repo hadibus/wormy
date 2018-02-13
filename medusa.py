@@ -6,7 +6,7 @@
 import random, pygame, sys
 from pygame.locals import *
 
-FPS = 20
+FPS = 100
 WINDOWWIDTH = 1280
 WINDOWHEIGHT = 960
 CELLSIZE = 20
@@ -40,9 +40,14 @@ CENTRALIZED = True
 NUM_WORMS_INIT = 2 # number of initial worms
 LEN_LIMIT = 4
 SECTOR_LIMIT = 4
-APPLE_LIFETIME = 200
+APPLE_LIFETIME = -1
 APPLE_SPAWN_FREQ = 50
+SWITCH_APPLE_FREQ = 0.00
+APPLE_TYPE_CURR = 0
 NEIGHBORHOOD = 5
+
+QUADRANT = 1 #1-4 are quads, all else are whole board
+QUADRANT_CHANGE_FREQ = 0.02
 
 LASER_FREQ = 0.07
 LASER_FULL_CHARGE = 30
@@ -56,12 +61,12 @@ def main():
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
-    #pygame.time.set_timer(12, 30000)
+    pygame.time.set_timer(12, 15000)
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
     BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
     pygame.display.set_caption('Medusa')
 
-    showStartScreen()
+    #showStartScreen()
     while True:
         runGame()
         showGameOverScreen()
@@ -96,10 +101,11 @@ def runGame():
 
     while True: # main game loop
         getActions(worms, apples)
+        if random.uniform(0.0, 1.0) < SWITCH_APPLE_FREQ:
+            setAppleLifetime()
         for event in pygame.event.get(): # event handling loop
             if event.type == QUIT:
                 terminate()
-
 
 
             elif event.type == KEYDOWN:
@@ -134,8 +140,20 @@ def runGame():
                     'sector': list(worms[w]['sector'])
                     }
                 if len(worms[w]['sector']) < SECTOR_LIMIT:
-                    worms[w]['sector'].append(True)
-                    newWormy['sector'].append(False)
+                    if len(worms[w]['sector']) % 2 == 0: #even, vertical. if odd, horizontal
+                        if worms[w]['coords'][HEAD]['y'] >= newWormy['coords'][HEAD]['y']:
+                            worms[w]['sector'].append(True)
+                            newWormy['sector'].append(False)
+                        else:
+                            worms[w]['sector'].append(False)
+                            newWormy['sector'].append(True)
+                    else:
+                        if worms[w]['coords'][HEAD]['x'] >= newWormy['coords'][HEAD]['x']:
+                            worms[w]['sector'].append(False)
+                            newWormy['sector'].append(True)
+                        else:
+                            worms[w]['sector'].append(True)
+                            newWormy['sector'].append(False)
                 worms.append(newWormy)
 
 
@@ -160,8 +178,8 @@ def runGame():
                         elif len(worms[w]['coords']) > len(worms[wother]['coords']):
                             wormToKill.append(w)
                         else:
-                            #Delete newer worm
-                            lr = min(w, wother)
+                            #Delete older worm
+                            lr = max(w, wother)
                             wormToKill.append(lr)
 
         wormToKill = list(set(wormToKill)) #only unique worms
@@ -210,9 +228,9 @@ def runGame():
             appleSpawnCount += 1
             if appleSpawnCount == APPLE_SPAWN_FREQ:
                 appleSpawnCount = 0
-                loc = getRandomLocation()
+                loc = getRandomAppleLocation()
                 while loc in stones:
-                    loc = getRandomLocation()
+                    loc = getRandomAppleLocation()
                 loc["time"] = getAppleLifetime()
                 apples.append(loc) # set a new apple somewhere
 
@@ -353,6 +371,23 @@ def terminate():
 def getRandomLocation():
     return {'x': random.randint(0, CELLWIDTH - 1), 'y': random.randint(0, CELLHEIGHT - 1)}
 
+def getRandomAppleLocation():
+    global QUADRANT, QUADRANT_CHANGE_FREQ
+    if random.uniform(0,1) < QUADRANT_CHANGE_FREQ:
+        QUADRANT = random.randint(1,4)
+    if QUADRANT == 1:
+        return {'x': random.randint(0, (CELLWIDTH - 1) // 2), 'y': random.randint(0, (CELLHEIGHT - 1) // 2)}
+    elif QUADRANT == 2:
+        return {'x': random.randint((CELLWIDTH - 1) // 2, CELLWIDTH - 1), 'y': random.randint(0, (CELLHEIGHT - 1) // 2)}
+    elif QUADRANT == 3:
+        return {'x': random.randint(0, (CELLWIDTH - 1) // 2), 'y': random.randint((CELLHEIGHT - 1) // 2, CELLHEIGHT - 1)}
+    elif QUADRANT == 4:
+        return {'x': random.randint((CELLWIDTH - 1) // 2, CELLWIDTH - 1), 'y': random.randint((CELLHEIGHT - 1) // 2, CELLHEIGHT - 1)}
+    else:
+        return getRandomLocation()
+
+
+
 
 
 def showGameOverScreen():
@@ -441,136 +476,144 @@ def getActions(worms, apples):
     # Move with some randomness
     # Go toward apples if within sensing radius
     # Don't hit walls
-    prob_dirchange = 0.4
+    prob_dirchange = 0.3
     # Randomness
     for worm in worms:
         change = random.randint(0,1)
         changeDir = random.uniform(0,1) < prob_dirchange
-        sa = senseApple(worm['coords'][HEAD], apples)
         # beyond corners
         bounds = getBoundaries(worm)
+        sa = senseApple(worm['coords'][HEAD], apples, bounds)
+
+        newDir = str(worm['dir'])
 
         if worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
             if worm['dir'] == UP:
-                worm['dir'] = RIGHT
+                newDir = RIGHT
             elif worm['dir'] == LEFT:
-                worm['dir'] = DOWN
+                newDir = DOWN
 
         elif worm['coords'][HEAD]['x'] <= bounds['xmin'] and worm['coords'][HEAD]['y'] >= bounds['ymax']:
             if worm['dir'] == DOWN:
-                worm['dir'] = RIGHT
+                newDir = RIGHT
             elif worm['dir'] == LEFT:
-                worm['dir'] = UP
+                newDir = UP
 
         elif worm['coords'][HEAD]['x'] >= bounds['xmax'] and worm['coords'][HEAD]['y'] <= bounds['ymin']:
             if worm['dir'] == UP:
-                worm['dir'] = LEFT
+                newDir = LEFT
             elif worm['dir'] == RIGHT:
-                worm['dir'] = DOWN
+                newDir = DOWN
 
         elif worm['coords'][HEAD]['x'] >= bounds['xmax'] and worm['coords'][HEAD]['y'] >= bounds['ymax']:
             if worm['dir'] == DOWN:
-                worm['dir'] = LEFT
+                newDir = LEFT
             elif worm['dir'] == RIGHT:
-                worm['dir'] = UP
+                newDir = UP
 
         # out of bounds
         elif worm['coords'][HEAD]['x'] < bounds['xmin']:
             if worm['dir'] == LEFT:
-                worm['dir'] = UP
+                newDir = UP
             elif worm['dir'] == UP or worm['dir'] == DOWN:
-                worm['dir'] = RIGHT
+                newDir = RIGHT
 
         elif worm['coords'][HEAD]['x'] > bounds['xmax']:
             if worm['dir'] == RIGHT:
-                worm['dir'] = DOWN
+                newDir = DOWN
             elif worm['dir'] == UP or worm['dir'] == DOWN:
-                worm['dir'] = LEFT
+                newDir = LEFT
 
         elif worm['coords'][HEAD]['y'] < bounds['ymin']:
             if worm['dir'] == UP:
-                worm['dir'] = RIGHT
+                newDir = RIGHT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
-                worm['dir'] = DOWN
+                newDir = DOWN
 
         elif worm['coords'][HEAD]['y'] > bounds['ymax']:
             if worm['dir'] == DOWN:
-                worm['dir'] = LEFT
+                newDir = LEFT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
-                worm['dir'] = UP
+                newDir = UP
 
         # on bounds
         elif worm['coords'][HEAD]['x'] == bounds['xmin']:
             if worm['dir'] == LEFT:
                 if change == 0:
-                    worm['dir'] = UP
+                    newDir = UP
                 elif change == 1:
-                    worm['dir'] = DOWN
+                    newDir = DOWN
             elif worm['dir'] == UP or worm['dir'] == DOWN:
                 if changeDir and change == 1:
-                    worm['dir'] = RIGHT
+                    newDir = RIGHT
 
         elif worm['coords'][HEAD]['x'] == bounds['xmax']:
             if worm['dir'] == RIGHT:
                 if change == 0:
-                    worm['dir'] = UP
+                    newDir = UP
                 elif change == 1:
-                    worm['dir'] = DOWN
+                    newDir = DOWN
             elif worm['dir'] == UP or worm['dir'] == DOWN:
                 if changeDir and change == 0:
-                    worm['dir'] = LEFT
+                    newDir = LEFT
 
         elif worm['coords'][HEAD]['y'] == bounds['ymin']:
             if worm['dir'] == UP:
                 if change == 0:
-                    worm['dir'] = LEFT
+                    newDir = LEFT
                 elif change == 1:
-                    worm['dir'] = RIGHT
+                    newDir = RIGHT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 1:
-                    worm['dir'] = DOWN
+                    newDir = DOWN
 
         elif worm['coords'][HEAD]['y'] == bounds['ymax']:
             if worm['dir'] == DOWN:
                 if change == 0:
-                    worm['dir'] = LEFT
+                    newDir = LEFT
                 elif change == 1:
-                    worm['dir'] = RIGHT
+                    newDir = RIGHT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if changeDir and change == 0:
-                    worm['dir'] = UP
-
-        elif sa != {}:
-            if sa['x'] < 0 and sa['y'] <= 0 and worm['dir'] != RIGHT:
-                worm['dir'] = LEFT
-            elif sa['x'] >= 0 and sa['y'] < 0 and worm['dir'] != DOWN:
-                worm['dir'] = UP
-            elif sa['x'] > 0 and sa['y'] >= 0 and worm['dir'] != LEFT:
-                worm['dir'] = RIGHT
-            elif sa['x'] <= 0 and sa['y'] > 0 and worm['dir'] != UP:
-                worm['dir'] = DOWN
+                    newDir = UP
 
         elif changeDir:
             if worm['dir'] == UP or worm['dir'] == DOWN:
                 if change == 0:
-                    worm['dir'] = LEFT
+                    newDir = LEFT
                 elif change == 1:
-                    worm['dir'] = RIGHT
+                    newDir = RIGHT
             elif worm['dir'] == LEFT or worm['dir'] == RIGHT:
                 if change == 0:
-                    worm['dir'] = UP
+                    newDir = UP
                 elif change == 1:
-                    worm['dir'] = DOWN
+                    newDir = DOWN
 
-def senseApple(wormHead, apples):
+        if sa != {} and appleInBounds(sa, worm, bounds):
+            if sa['x'] < 0 and sa['y'] <= 0 and worm['dir'] != RIGHT:
+                newDir = LEFT
+            elif sa['x'] >= 0 and sa['y'] < 0 and worm['dir'] != DOWN:
+                newDir = UP
+            elif sa['x'] > 0 and sa['y'] >= 0 and worm['dir'] != LEFT:
+                newDir = RIGHT
+            elif sa['x'] <= 0 and sa['y'] > 0 and worm['dir'] != UP:
+                newDir = DOWN
+            
+        worm['dir'] = newDir
+
+def senseApple(wormHead, apples, bounds):
     dist = {}
     for apple in apples:
         xDiff = apple['x'] - wormHead['x']
         yDiff = apple['y'] - wormHead['y']
         if abs(xDiff) <= NEIGHBORHOOD and abs(yDiff) <= NEIGHBORHOOD:
-            dist['x'] = xDiff
-            dist['y'] = yDiff
-            break # just first apple seen
+            if (apple['x'] >= bounds['xmin'] 
+                and apple['x'] <= bounds['xmax']
+                and apple['y'] >= bounds['ymin']
+                and apple['y'] <= bounds['ymax']):
+                dist['x'] = xDiff
+                dist['y'] = yDiff
+                break # just first apple seen
     return dist
 
 def getAppleLifetime():
@@ -578,6 +621,32 @@ def getAppleLifetime():
         return APPLE_LIFETIME
     elif type(APPLE_LIFETIME) is tuple:
         return random.randint(APPLE_LIFETIME[0], APPLE_LIFETIME[1])
+
+def setAppleLifetime():
+    global APPLE_TYPE_CURR, APPLE_LIFETIME
+    if APPLE_TYPE_CURR == 0:
+        if random.randint(0,1) == 0:
+            APPLE_LIFETIME = 100
+            APPLE_TYPE_CURR = 1
+        else:
+            APPLE_LIFETIME = (80, 150)
+            APPLE_TYPE_CURR = 2
+
+    elif APPLE_TYPE_CURR == 1:
+        if random.randint(0,1) == 0:
+            APPLE_LIFETIME = -1
+            APPLE_TYPE_CURR = 0
+        else:
+            APPLE_LIFETIME = (100, 200)
+            APPLE_TYPE_CURR = 2
+
+    elif APPLE_TYPE_CURR == 2:
+        if random.randint(0,1) == 0:
+            APPLE_LIFETIME = -1
+            APPLE_TYPE_CURR = 0
+        else:
+            APPLE_LIFETIME = 100
+            APPLE_TYPE_CURR = 1
 
 def getBoundaries(worm):
     bounds = {}
@@ -608,6 +677,12 @@ def getBoundaries(worm):
         
     return bounds
 
+def appleInBounds(sa, worm, bounds):
+    ret = sa['x'] + worm['coords'][HEAD]['x'] >= bounds['xmin'] 
+    ret = ret and sa['x'] + worm['coords'][HEAD]['x'] <= bounds['xmax']
+    ret = ret and sa['y'] + worm['coords'][HEAD]['y'] >= bounds['ymin']
+    ret = ret and sa['y'] + worm['coords'][HEAD]['y'] <= bounds['ymax']
+    return ret
 
 def isWithinGrid(coord):
     return coord['x'] > -1 and coord['x'] < CELLWIDTH and coord['y'] > -1 and coord['y'] < CELLHEIGHT
